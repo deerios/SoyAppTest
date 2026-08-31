@@ -6,6 +6,7 @@ import type {
   UiResponse,
 } from '@devvit/web/shared'
 import {
+  type DiscordMessage,
   Endpoint,
   EndpointMethod,
   type ErrorRsp,
@@ -82,19 +83,35 @@ async function routeSchedulePostVideo(): Promise<TriggerResponse> {
 }
 
 async function processQueue(): Promise<{created: number}> {
-  const queueUrl = await settings.get<string>('queueUrl')
-  if (!queueUrl) return {created: 0}
+  const [queueChannelId, discordBotToken] = await Promise.all([
+    settings.get<string>('queueChannelId'),
+    settings.get<string>('discordBotToken'),
+  ])
+  if (!queueChannelId || !discordBotToken) return {created: 0}
 
-  let entries: QueueEntry[]
+  let messages: DiscordMessage[]
   try {
-    const rsp = await fetch(queueUrl)
+    const rsp = await fetch(
+      `https://discord.com/api/v10/channels/${queueChannelId}/messages?limit=100`,
+      {headers: {Authorization: `Bot ${discordBotToken}`}},
+    )
     if (!rsp.ok) throw Error(`fetch failed with status ${rsp.status}`)
-    entries = (await rsp.json()) as QueueEntry[]
+    messages = (await rsp.json()) as DiscordMessage[]
   } catch (err) {
     console.error(
       `queue fetch failed; ${err instanceof Error ? err.message : err}`,
     )
     return {created: 0}
+  }
+
+  const entries: QueueEntry[] = []
+  for (const message of messages) {
+    if (!message.author?.bot) continue
+    try {
+      entries.push(JSON.parse(message.content) as QueueEntry)
+    } catch {
+      // Not one of our queue messages; ignore.
+    }
   }
 
   let created = 0

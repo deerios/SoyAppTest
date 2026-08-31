@@ -1,13 +1,20 @@
 /** Generic error detail for all responses. */
 export type ErrorRsp = {error: string; status: number}
 
-/** One video queued by the soybot pipeline, read from `queue.json`. */
+/** One video queued by the soybot pipeline, read from a JSON message
+ * body in the Discord queue channel. */
 export type QueueEntry = {
   videoId: string
   subreddit: string
   title: string
   summary: string
   flag: 'creator-summarized' | 'soybot-summarized'
+}
+
+/** The fields we need from a Discord REST API message object. */
+export type DiscordMessage = {
+  content: string
+  author?: {bot?: boolean}
 }
 
 export type Endpoint = (typeof Endpoint)[keyof typeof Endpoint]

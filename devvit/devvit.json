@@ -26,16 +26,21 @@
   "permissions": {
     "http": {
       "enable": true,
-      "domains": ["raw.githubusercontent.com"]
+      "domains": ["discord.com"]
     }
   },
   "settings": {
     "global": {
-      "queueUrl": {
+      "queueChannelId": {
         "type": "string",
-        "label": "Queue URL",
-        "helpText": "Raw GitHub URL to the soybot pipeline's queue.json.",
-        "defaultValue": "https://raw.githubusercontent.com/deerios/SoyAppTest/main/queue.json"
+        "label": "Queue Channel ID",
+        "helpText": "Discord channel ID the soybot pipeline posts queue entries to."
+      },
+      "discordBotToken": {
+        "type": "string",
+        "label": "Discord Bot Token",
+        "helpText": "Bot token used to read the queue channel via Discord's REST API.",
+        "isSecret": true
       }
     }
   },
