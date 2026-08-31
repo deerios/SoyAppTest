@@ -168,8 +168,19 @@ class YouTubeClient:
     def __init__(self, transcript_lang: str = "en"):
         self.transcript_lang = transcript_lang
 
+    # Hosted CI runners share IP ranges YouTube flags for bot-check
+    # ("Sign in to confirm you're not a bot"). The android client skips
+    # that check, at the cost of being an unofficial workaround yt-dlp/
+    # YouTube can break at any time.
+    _EXTRACTOR_ARGS = {"youtube": {"player_client": ["android"]}}
+
     def get_video_info(self, url: str) -> VideoInfo:
-        opts = {"skip_download": True, "quiet": True, "no_warnings": True}
+        opts = {
+            "skip_download": True,
+            "quiet": True,
+            "no_warnings": True,
+            "extractor_args": self._EXTRACTOR_ARGS,
+        }
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
         return VideoInfo(
@@ -189,6 +200,7 @@ class YouTubeClient:
             "writesubtitles": True,
             "writeautomaticsub": True,
             "subtitleslangs": [self.transcript_lang],
+            "extractor_args": self._EXTRACTOR_ARGS,
         }
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
