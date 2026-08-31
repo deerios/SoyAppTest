@@ -1,0 +1,46 @@
+{
+  "$schema": "https://developers.reddit.com/schema/config-file.v1.json",
+  "name": "soyapptest",
+  "server": {},
+  "menu": {
+    "items": [
+      {
+        "label": "[soyapptest] Sync Queue Now",
+        "description": "Check the video queue and post any new videos immediately.",
+        "location": "subreddit",
+        "endpoint": "/internal/on/menu/new-post"
+      }
+    ]
+  },
+  "triggers": {
+    "onAppInstall": "/internal/on/app/install"
+  },
+  "scheduler": {
+    "tasks": {
+      "post-video": {
+        "endpoint": "/internal/on/schedule/post-video",
+        "cron": "*/5 * * * *"
+      }
+    }
+  },
+  "permissions": {
+    "http": {
+      "domains": ["raw.githubusercontent.com"]
+    }
+  },
+  "settings": {
+    "global": {
+      "queueUrl": {
+        "type": "string",
+        "label": "Queue URL",
+        "helpText": "Raw GitHub URL to the soybot pipeline's queue.json, e.g. https://raw.githubusercontent.com/<org>/<repo>/main/queue.json"
+      }
+    }
+  },
+  "scripts": {
+    "dev": "npm run watch"
+  },
+  "dev": {
+    "subreddit": "soyapptest_dev"
+  }
+}
