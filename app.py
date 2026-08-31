@@ -13,6 +13,7 @@ import yt_dlp
 YOUTUBE_URL_RE = re.compile(
     r"https?://(?:www\.)?(?:youtube\.com/watch\?v=[\w-]+|youtu\.be/[\w-]+)\S*"
 )
+YOUTUBE_ID_RE = re.compile(r"(?:v=|youtu\.be/)([\w-]{11})")
 VTT_TAG_RE = re.compile(r"<[^>]+>")
 VTT_TIMESTAMP_LINE_RE = re.compile(r"^\d{2}:\d{2}:\d{2}\.\d{3} -->")
 CREATOR_SUMMARIZED = "creator-summarized"
@@ -162,32 +163,42 @@ class VideoInfo:
 
 
 class YouTubeClient:
-    """Wraps yt-dlp to fetch video metadata and transcripts (via subtitles),
-    without downloading any video or audio."""
-
-    def __init__(self, transcript_lang: str = "en"):
-        self.transcript_lang = transcript_lang
+    """Fetches video metadata via the YouTube Data API (immune to yt-dlp's
+    IP-based bot-check) and transcripts via yt-dlp subtitles, without
+    downloading any video or audio."""
 
     # Hosted CI runners share IP ranges YouTube flags for bot-check
     # ("Sign in to confirm you're not a bot"). The android client skips
     # that check, at the cost of being an unofficial workaround yt-dlp/
-    # YouTube can break at any time.
+    # YouTube can break at any time. Only applies to get_transcript now;
+    # get_video_info uses the Data API instead, which isn't subject to it.
     _EXTRACTOR_ARGS = {"youtube": {"player_client": ["android"]}}
 
+    def __init__(self, api_key: str, transcript_lang: str = "en"):
+        self.api_key = api_key
+        self.transcript_lang = transcript_lang
+
     def get_video_info(self, url: str) -> VideoInfo:
-        opts = {
-            "skip_download": True,
-            "quiet": True,
-            "no_warnings": True,
-            "extractor_args": self._EXTRACTOR_ARGS,
-        }
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=False)
+        match = YOUTUBE_ID_RE.search(url)
+        if not match:
+            raise ValueError(f"Could not extract a YouTube video ID from {url}")
+        video_id = match.group(1)
+
+        response = requests.get(
+            "https://www.googleapis.com/youtube/v3/videos",
+            params={"part": "snippet", "id": video_id, "key": self.api_key},
+        )
+        response.raise_for_status()
+        items = response.json().get("items", [])
+        if not items:
+            raise ValueError(f"YouTube API returned no results for video {video_id}")
+
+        snippet = items[0]["snippet"]
         return VideoInfo(
-            video_id=info["id"],
-            channel_id=info.get("channel_id", ""),
-            description=info.get("description", "") or "",
-            title=info.get("title", ""),
+            video_id=video_id,
+            channel_id=snippet.get("channelId", ""),
+            description=snippet.get("description", "") or "",
+            title=snippet.get("title", ""),
         )
 
     def get_transcript(self, url: str) -> str:
@@ -326,7 +337,7 @@ def main():
     posted_videos = PostedVideos(os.environ.get("SOYBOT_POSTED_VIDEOS_PATH", "posted_videos.json"))
 
     discord_reader = DiscordReader(token=os.environ["DISCORD_BOT_TOKEN"])
-    youtube_client = YouTubeClient()
+    youtube_client = YouTubeClient(api_key=os.environ["YOUTUBE_API_KEY"])
     anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY")
     summarizer = ClaudeSummarizer(api_key=anthropic_api_key) if anthropic_api_key else None
     description_extractor = DescriptionExtractor(config, youtube_client, summarizer)
