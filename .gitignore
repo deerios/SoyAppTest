@@ -4,4 +4,3 @@ __pycache__/
 venv/
 local_state.json
 local_posted_videos.json
-local_queue.json

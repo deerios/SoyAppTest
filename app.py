@@ -37,6 +37,7 @@ class Config:
         with open(path, "r") as f:
             data = yaml.safe_load(f) or {}
         self.discord_channel_id = data["discord_channel_id"]
+        self.discord_queue_channel_id = data["discord_queue_channel_id"]
         self.subreddit = data["subreddit"]
         self.creator_summarized_channels = set(data.get("creator_summarized_channels", []))
 
@@ -84,34 +85,34 @@ class PostedVideos:
             json.dump(self.entries, f, indent=2)
 
 
-class QueueWriter:
-    """Appends newly processed videos to queue.json for the Devvit app to
-    pick up and post to Reddit. Keeps only the most recent MAX_ENTRIES so
-    the file doesn't grow unbounded."""
+class DiscordQueuePublisher:
+    """Posts each newly processed video as a compact JSON message to a
+    dedicated Discord channel, which the Devvit app polls via Discord's REST
+    API. discord.com is on Devvit's global fetch allowlist, unlike
+    raw.githubusercontent.com (the previous, file-based approach), which
+    would need per-app domain approval from Reddit before it could actually
+    be fetched."""
 
-    MAX_ENTRIES = 50
+    API_BASE = "https://discord.com/api/v10"
 
-    def __init__(self, path: str):
-        self.path = path
-        self.entries = []
-        if os.path.exists(path):
-            with open(path, "r") as f:
-                self.entries = json.load(f)
+    def __init__(self, token: str, channel_id: str):
+        self.token = token
+        self.channel_id = channel_id
 
     def add(self, video_id: str, subreddit: str, title: str, summary: str, flag: str):
-        self.entries.append({
+        payload = {
             "videoId": video_id,
             "subreddit": subreddit,
             "title": title,
             "summary": summary,
             "flag": flag,
-        })
-        self.entries = self.entries[-self.MAX_ENTRIES:]
-        self.save()
-
-    def save(self):
-        with open(self.path, "w") as f:
-            json.dump(self.entries, f, indent=2)
+        }
+        response = requests.post(
+            f"{self.API_BASE}/channels/{self.channel_id}/messages",
+            headers={"Authorization": f"Bot {self.token}"},
+            json={"content": json.dumps(payload)},
+        )
+        response.raise_for_status()
 
 
 class DiscordReader:
@@ -295,7 +296,7 @@ class Pipeline:
         discord_reader: DiscordReader,
         youtube_client: YouTubeClient,
         description_extractor: DescriptionExtractor,
-        queue_writer: QueueWriter,
+        queue_writer: DiscordQueuePublisher,
     ):
         self.config = config
         self.state = state
@@ -336,12 +337,13 @@ def main():
     state = State(os.environ.get("SOYBOT_STATE_PATH", "state.json"))
     posted_videos = PostedVideos(os.environ.get("SOYBOT_POSTED_VIDEOS_PATH", "posted_videos.json"))
 
-    discord_reader = DiscordReader(token=os.environ["DISCORD_BOT_TOKEN"])
+    discord_token = os.environ["DISCORD_BOT_TOKEN"]
+    discord_reader = DiscordReader(token=discord_token)
     youtube_client = YouTubeClient(api_key=os.environ["YOUTUBE_API_KEY"])
     anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY")
     summarizer = ClaudeSummarizer(api_key=anthropic_api_key) if anthropic_api_key else None
     description_extractor = DescriptionExtractor(config, youtube_client, summarizer)
-    queue_writer = QueueWriter(os.environ.get("SOYBOT_QUEUE_PATH", "queue.json"))
+    queue_writer = DiscordQueuePublisher(token=discord_token, channel_id=config.discord_queue_channel_id)
 
     pipeline = Pipeline(
         config=config,
