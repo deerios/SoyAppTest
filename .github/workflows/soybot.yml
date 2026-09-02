@@ -4,7 +4,7 @@ on:
   schedule:
     # Every 15 minutes. Keep this interval reasonable so we don't hammer
     # Discord/Reddit/YouTube, and so overlapping runs stay rare.
-    - cron: "*/15 * * * *"
+    - cron: '7/15 * * * *'
   workflow_dispatch: {}
 
 concurrency:
